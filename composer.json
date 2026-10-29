@@ -1,0 +1,50 @@
+{
+    "name": "laramon/agent",
+    "description": "Laramon agent: ships requests, queries, jobs, exceptions, logs and host resource samples from a Laravel app to a Laramon server.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "laravel",
+        "monitoring",
+        "apm",
+        "laramon"
+    ],
+    "authors": [
+        {
+            "name": "Mohamed Sheeraz",
+            "email": "mohamed.sheeraz@gmail.com"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "ext-json": "*",
+        "illuminate/support": "^11.0|^12.0|^13.0",
+        "illuminate/contracts": "^11.0|^12.0|^13.0",
+        "illuminate/console": "^11.0|^12.0|^13.0"
+    },
+    "suggest": {
+        "ext-curl": "Faster, more reliable transport (falls back to PHP streams)",
+        "ext-zlib": "Gzip compressed payloads",
+        "ext-pcntl": "Graceful shutdown of the laramon:agent daemon"
+    },
+    "autoload": {
+        "psr-4": {
+            "Laramon\\Agent\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Laramon\\Agent\\LaramonServiceProvider"
+            ],
+            "aliases": {
+                "Laramon": "Laramon\\Agent\\Facades\\Laramon"
+            }
+        },
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
