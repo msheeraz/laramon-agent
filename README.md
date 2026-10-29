@@ -17,10 +17,10 @@ Add the package to the monitored app as a Composer repository. Pick one:
 composer config repositories.laramon-agent path /Users/641/Documents/Dev/websites/laramon-agent
 ```
 
-**Git** (servers / Laravel Cloud, once this folder is pushed to a private repo):
+**Git** (servers / Laravel Cloud):
 
 ```bash
-composer config repositories.laramon-agent vcs git@github.com:you/laramon-agent.git
+composer config repositories.laramon-agent vcs https://github.com/msheeraz/laramon-agent.git
 ```
 
 Then install:
