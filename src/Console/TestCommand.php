@@ -50,7 +50,7 @@ class TestCommand extends Command
         ];
 
         $this->components->task('Sending test telemetry to '.$transport->endpoint(), function () use ($transport, $records, &$result) {
-            $result = $transport->send($records);
+            $result = $transport->sendDirect($records);
 
             return $result['status'] >= 200 && $result['status'] < 300;
         });

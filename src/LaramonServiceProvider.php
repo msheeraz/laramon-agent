@@ -2,10 +2,10 @@
 
 namespace Laramon\Agent;
 
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Http\Kernel as HttpKernel;
 use Illuminate\Support\ServiceProvider;
-use Laramon\Agent\Console\AgentCommand;
-use Laramon\Agent\Console\SampleCommand;
+use Laramon\Agent\Console\FlushCommand;
 use Laramon\Agent\Console\StatusCommand;
 use Laramon\Agent\Console\TestCommand;
 use Laramon\Agent\Http\RecordRequest;
@@ -42,13 +42,16 @@ class LaramonServiceProvider extends ServiceProvider
                 $config['token'] ?? null,
                 (float) ($config['timeout'] ?? 2),
                 (bool) ($config['gzip'] ?? true),
-                [
+                // Resolved on first send, not on every boot.
+                fn () => [
                     'php' => PHP_VERSION,
                     'laravel' => $app->version(),
                     'server' => (string) ($config['server'] ?? gethostname()),
                     'deploy' => Deploy::detect($app->basePath(), $config['deploy'] ?? null),
                 ],
                 fn () => Runtime::snapshot($app),
+                ($config['transport'] ?? 'spool') === 'direct' ? 'direct' : 'spool',
+                max(1, (int) ($config['spool_interval'] ?? 5)),
             );
         });
 
@@ -65,7 +68,7 @@ class LaramonServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->publishes([__DIR__.'/../config/laramon.php' => config_path('laramon.php')], 'laramon-config');
 
-            $this->commands([AgentCommand::class, SampleCommand::class, TestCommand::class, StatusCommand::class]);
+            $this->commands([TestCommand::class, StatusCommand::class, FlushCommand::class]);
         }
 
         if (! $this->shouldRecord()) {
@@ -97,6 +100,14 @@ class LaramonServiceProvider extends ServiceProvider
         }
 
         $this->registerMiddleware();
+
+        // Ship the spool's tail even when traffic stops (needs the scheduler).
+        $this->callAfterResolving(Schedule::class, function (Schedule $schedule) {
+            $schedule->call(fn () => $this->app->make(Transport::class)->shipSpool())
+                ->name('laramon:flush')
+                ->everyMinute()
+                ->when(fn () => config('laramon.transport', 'spool') !== 'direct');
+        });
 
         $requests = $this->app->make(RequestWatcher::class);
         register_shutdown_function(function () use ($requests, $recorder) {

@@ -17,6 +17,9 @@ class ScheduleWatcher extends Watcher
     public function register(): void
     {
         $this->listen(ScheduledTaskStarting::class, function (ScheduledTaskStarting $event) {
+            if (self::internal($event->task)) {
+                return;
+            }
             if ($this->recorder->depth() === 0 && function_exists('memory_reset_peak_usage')) {
                 memory_reset_peak_usage();
             }
@@ -36,6 +39,9 @@ class ScheduleWatcher extends Watcher
         $this->listen(ScheduledTaskFailed::class, fn (ScheduledTaskFailed $e) => $this->finish($e->task, 'failed'));
 
         $this->listen(ScheduledTaskSkipped::class, function (ScheduledTaskSkipped $event) {
+            if (self::internal($event->task)) {
+                return;
+            }
             $execution = Execution::start('schedule', $this->recorder->sample('scheduled_tasks'), self::name($event->task));
             $this->recorder->recordExecution($execution, 'scheduled_task', $this->fields($event->task, $execution, 'skipped') + [
                 'duration' => 0, 'cpu' => 0, 'memory' => 0, 'memory_delta' => 0,
@@ -44,6 +50,12 @@ class ScheduleWatcher extends Watcher
                 $this->recorder->flush();
             }
         });
+    }
+
+    /** The agent's own housekeeping tasks are not recorded. */
+    private static function internal(object $task): bool
+    {
+        return str_starts_with((string) ($task->description ?? ''), 'laramon:');
     }
 
     private function finish(object $task, string $status): void

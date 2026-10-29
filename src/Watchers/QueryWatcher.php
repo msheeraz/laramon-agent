@@ -4,10 +4,11 @@ namespace Laramon\Agent\Watchers;
 
 use Illuminate\Database\Events\QueryExecuted;
 use Laramon\Agent\Support\Clock;
+use Laramon\Agent\Support\Stamp;
 
 class QueryWatcher extends Watcher
 {
-    /** @var array<string, int> query shape => last explained at (per process) */
+    /** @var array<string, int> query shapes already considered in this process */
     private array $explained = [];
 
     private bool $explaining = false;
@@ -61,12 +62,14 @@ class QueryWatcher extends Watcher
             return null;
         }
 
+        // Once per query shape per cooldown per server: PHP-FPM forgets process
+        // memory between requests, so the cooldown lives in a shared stamp.
         $shape = md5(preg_replace('/\s+/', ' ', $sql) ?? $sql);
-        $now = time();
-        if (($this->explained[$shape] ?? 0) > $now - ($config['cooldown'] ?? 600)) {
+        $cooldown = (int) ($config['cooldown'] ?? 600);
+        if (isset($this->explained[$shape]) || ! Stamp::due('explain-'.$shape, $cooldown)) {
             return null;
         }
-        $this->explained[$shape] = $now;
+        $this->explained[$shape] = time();
 
         $connection = $event->connection;
         $driver = $connection->getDriverName();

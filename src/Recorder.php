@@ -3,7 +3,6 @@
 namespace Laramon\Agent;
 
 use Laramon\Agent\Support\Clock;
-use Laramon\Agent\Support\Inflight;
 use Laramon\Agent\Support\Uuid;
 
 /**
@@ -109,18 +108,7 @@ class Recorder
     {
         $this->stack[] = $execution;
 
-        if ($execution->name !== null) {
-            $this->markInflight($execution);
-        }
-
         return $execution;
-    }
-
-    public function markInflight(Execution $execution): void
-    {
-        if ($this->config('track_inflight', true)) {
-            Inflight::write($execution->type, $execution->resolvedName(), $execution->trace, $execution->startedAt);
-        }
     }
 
     /** @var list<callable(Execution): void> */
@@ -193,11 +181,6 @@ class Recorder
                 'name' => $execution->user['name'] ?? null,
                 'email' => $execution->user['email'] ?? null,
             ], $execution, true];
-        }
-
-        if ($this->config('track_inflight', true)) {
-            $parent = $this->current();
-            $parent !== null && $parent->name !== null ? $this->markInflight($parent) : Inflight::clear();
         }
     }
 

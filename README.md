@@ -2,8 +2,8 @@
 
 The Laramon agent records what your Laravel application does — requests, queries,
 jobs, commands, scheduled tasks, exceptions, logs, cache, mail, notifications,
-outgoing HTTP calls — plus host CPU / memory / process samples, and ships it to
-your self-hosted Laramon server.
+outgoing HTTP calls — and ships it to your self-hosted Laramon server in
+batches, without a daemon and with about 0.3 ms of overhead per request.
 
 Supports PHP 8.2+ and Laravel 11, 12 and 13.
 
@@ -26,7 +26,7 @@ composer config repositories.laramon-agent vcs https://github.com/msheeraz/laram
 Then install:
 
 ```bash
-composer require laramon/agent:^0.1@dev
+composer require laramon/agent
 php artisan vendor:publish --tag=laramon-config   # optional
 ```
 
@@ -42,52 +42,36 @@ Verify:
 ```bash
 php artisan laramon:status   # config + connectivity + token check
 php artisan laramon:test     # sends a test request, log and exception
+php artisan laramon:flush    # ship the local spool now
 ```
 
 Nothing is recorded while `LARAMON_URL` / `LARAMON_TOKEN` are empty, when
 `LARAMON_ENABLED=false`, or while running the test suite (set
 `LARAMON_RECORD_TESTS=true` to override).
 
-## Host resource sampler (CPU, memory, OOM kills, restarts)
+## How data leaves your app (performance)
 
-Run one daemon per server / container. It samples every `LARAMON_SAMPLE_INTERVAL`
-seconds (default 10):
+The agent is built so production traffic never waits on Laramon:
 
-```bash
-php artisan laramon:agent          # -v prints every sample
-```
+1. While a request / job / command runs, records are kept in memory.
+2. After the response is sent (PHP-FPM `fastcgi_finish_request`), the
+   execution's records are appended to a local spool file — one small write,
+   about **+0.3 ms** per request.
+3. At most every `LARAMON_SPOOL_INTERVAL` seconds (default 5) **one** process per
+   server claims the spool and ships it to Laramon as a single gzip batch.
+   Failed shipments back off for 30 s; if Laramon is unreachable for long, the
+   spool is capped at 50 MB and new records are dropped instead of slowing the app.
+4. When traffic stops, the scheduler ships what is left every minute (it registers
+   `laramon:flush` automatically; on Laravel Cloud just enable the scheduler).
 
-Each sample contains CPU %, memory used / limit, swap, load, uptime, the OOM-kill
-counter and the top processes by RSS (classified as fpm, queue, horizon,
-scheduler, octane, reverb, artisan...). Every PHP process that runs a request,
-job, command or scheduled task writes `{tmp}/laramon-inflight/{pid}.json`, so
-samples also report **what each process was executing** — that is how Laramon
-attributes an OOM kill or a memory spike to a route or job even when the process
-died before it could report.
+No daemon or background process is needed. Other per-request costs are bounded:
+runtime info (PHP / Laravel / drivers) is sent at most hourly per server, and
+`EXPLAIN` for slow queries runs at most once per query shape per 10 minutes per
+server (shared through APCu or a small file in the temp dir).
 
-If PHP-FPM runs with systemd `PrivateTmp=true` (or the daemon runs in another
-container), point both at a shared directory with `LARAMON_INFLIGHT_PATH`.
-
-On Linux it reads cgroup v2 / v1 (containers, Laravel Cloud, Kubernetes) and
-falls back to `/proc`. On macOS it uses `ps`, `sysctl` and `vm_stat`.
-
-**Supervisor**
-
-```ini
-[program:laramon-agent]
-command=php /var/www/app/artisan laramon:agent
-autostart=true
-autorestart=true
-stopsignal=TERM
-stopwaitsecs=15
-user=www-data
-redirect_stderr=true
-stdout_logfile=/var/log/laramon-agent.log
-```
-
-**Laravel Cloud / Forge daemons**: add a background process / daemon with the
-command `php artisan laramon:agent`. Without a daemon you can schedule
-`php artisan laramon:sample` every minute (coarser data).
+The spool lives in `{sys_get_temp_dir()}/laramon` (override with `LARAMON_STATE_PATH`).
+`LARAMON_TRANSPORT=direct` posts every execution straight to Laramon — useful
+locally for debugging, never in production.
 
 ## What is captured
 
@@ -105,13 +89,11 @@ command `php artisan laramon:agent`. Without a daemon you can schedule
 | log | `MessageLogged` at or above `LARAMON_LOG_LEVEL` |
 | user | authenticated user id / name / email, once per execution; queued jobs carry the id of the user who dispatched them |
 | context | `Context::all()` (Laravel 11+) attached to requests, job attempts and commands (64KB cap) |
-| host_sample | `laramon:agent` daemon |
 
-Durations are microseconds. Data is buffered per execution and sent gzip
-compressed after the response is sent (FPM `fastcgi_finish_request`), after each
-job / command, when the buffer reaches `LARAMON_BUFFER_LIMIT`, and on shutdown.
-Delivery uses raw curl with a short timeout (`LARAMON_TIMEOUT`, default 2s) and
-never throws into your application.
+Durations are microseconds. Data is buffered per execution and spooled after the
+response is sent, after each job / command, when the buffer reaches
+`LARAMON_BUFFER_LIMIT`, and on shutdown. Shipping uses raw curl with a short
+timeout (`LARAMON_TIMEOUT`, default 2s) and never throws into your application.
 
 ## Configuration
 
@@ -141,7 +123,9 @@ never throws into your application.
 | `LARAMON_LOG_LEVEL` | `debug` | Minimum log level recorded |
 | `LARAMON_BUFFER_LIMIT` | `500` | Flush early after this many buffered records |
 | `LARAMON_TIMEOUT` | `2` | Seconds per ingest request |
-| `LARAMON_SAMPLE_INTERVAL` | `10` | Seconds between host samples (`laramon:agent`) |
+| `LARAMON_TRANSPORT` | `spool` | `spool` (batched, recommended) or `direct` (post every execution; debugging) |
+| `LARAMON_SPOOL_INTERVAL` | `5` | Seconds between spool shipments per server |
+| `LARAMON_STATE_PATH` | temp dir | Where the spool and throttle stamps live |
 
 ## Query plans (EXPLAIN)
 

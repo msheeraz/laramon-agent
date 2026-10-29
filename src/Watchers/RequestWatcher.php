@@ -49,8 +49,6 @@ class RequestWatcher extends Watcher
             $execution->state['route_name'] = $route->getName();
             $execution->state['route_path'] = $path;
             $execution->state['route_action'] = $route->getActionName();
-
-            $this->recorder->markInflight($execution);
         });
 
         $this->listen(PreparingResponse::class, function () {

@@ -100,18 +100,21 @@ return [
     // Flush early when this many records are buffered (long jobs / commands).
     'buffer_limit' => (int) env('LARAMON_BUFFER_LIMIT', 500),
 
+    /*
+    | How records leave the app:
+    |   spool  - after the response is sent, append the execution's records to
+    |            a local spool file (one small write); at most every
+    |            `spool_interval` seconds one process ships the spool to Laramon
+    |            as a single compressed batch. Requests never wait on Laramon.
+    |   direct - post every execution straight to Laramon (debugging only).
+    */
+    'transport' => env('LARAMON_TRANSPORT', 'spool'),
+
+    // Seconds between spool shipments (per server).
+    'spool_interval' => (int) env('LARAMON_SPOOL_INTERVAL', 5),
+
     // HTTP timeout in seconds when shipping to Laramon.
     'timeout' => (float) env('LARAMON_TIMEOUT', 2),
 
     'gzip' => (bool) env('LARAMON_GZIP', true),
-
-    // Seconds between host resource samples taken by `php artisan laramon:agent`.
-    'sample_interval' => (int) env('LARAMON_SAMPLE_INTERVAL', 10),
-
-    // Write {tmp}/laramon-inflight/{pid}.json while an execution runs so a
-    // process killed by OOM / restart can still be attributed by the daemon.
-    'track_inflight' => (bool) env('LARAMON_TRACK_INFLIGHT', true),
-
-    // Number of processes (by RSS) included in each host sample.
-    'top_processes' => (int) env('LARAMON_TOP_PROCESSES', 15),
 ];
