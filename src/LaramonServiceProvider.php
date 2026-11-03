@@ -109,6 +109,9 @@ class LaramonServiceProvider extends ServiceProvider
                 ->when(fn () => config('laramon.transport', 'spool') !== 'direct');
         });
 
+        // Arms the out-of-memory shutdown handler in src/bootstrap.php.
+        defined('LARAMON_AGENT_RECORDING') || define('LARAMON_AGENT_RECORDING', true);
+
         $requests = $this->app->make(RequestWatcher::class);
         register_shutdown_function(function () use ($requests, $recorder) {
             try {

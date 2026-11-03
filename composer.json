@@ -30,7 +30,10 @@
     "autoload": {
         "psr-4": {
             "Laramon\\Agent\\": "src/"
-        }
+        },
+        "files": [
+            "bootstrap.php"
+        ]
     },
     "extra": {
         "laravel": {

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.2.1 — 2026-11-03
+
+- **Out-of-memory crashes are now reported.** When a request, job or command
+  dies on `memory_limit`, a shutdown handler registered through Composer's
+  autoloader (before Laravel's own) grants 64 MB more so Laravel can report the
+  `FatalError` and the agent can record and spool the crash. Previously
+  Laravel's 32 KB reserve ran out and the crash left no trace. Normal requests
+  are unaffected; it does nothing unless the agent is recording.
+
 ## v0.2.0 — 2026-10-29
 
 Performance release: the agent no longer slows the monitored app.
